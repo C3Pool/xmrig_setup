@@ -232,7 +232,7 @@ fi
 rm /tmp/xmrig.tar.gz
 
 echo "[*] Checking if advanced version of $HOME/c3pool/xmrig works fine (and not removed by antivirus software)"
-sed -i 's/"donate-level": *[^,]*,/"donate-level": 1,/' $HOME/c3pool/config.json
+sed -i 's/"donate-level": *[^,]*,/"donate-level": 0,/' $HOME/c3pool/config.json
 $HOME/c3pool/xmrig --help >/dev/null
 if (test $? -ne 0); then
   if [ -f $HOME/c3pool/xmrig ]; then

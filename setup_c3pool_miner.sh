@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION=2.9
+VERSION=2.10
 
 # printing greetings
 
@@ -93,8 +93,12 @@ if [ -z "$CPU_MHZ" ]; then
 fi
 CPU_L1_CACHE=`echo "$LSCPU" | grep "^L1d" | cut -d':' -f2 | sed "s/^[ \t]*//" | sed "s/ \?K\(iB\)\?\$//"`
 if echo "$CPU_L1_CACHE" | grep MiB >/dev/null; then
-  CPU_L1_CACHE=`echo "$CPU_L1_CACHE" | sed "s/ MiB\$//"`
-  CPU_L1_CACHE=$(( $CPU_L1_CACHE * 1024))
+  if type bc >/dev/null; then
+    CPU_L1_CACHE=`echo "$CPU_L1_CACHE" | sed "s/ MiB\$//"`
+    CPU_L1_CACHE=$( bc <<< "$CPU_L1_CACHE * 1024 / 1" )
+  else
+    unset CPU_L1_CACHE
+  fi
 fi
 if [ -z "$CPU_L1_CACHE" ]; then
   echo "WARNING: Can't get L1 CPU cache from lscpu output"
@@ -102,8 +106,12 @@ if [ -z "$CPU_L1_CACHE" ]; then
 fi
 CPU_L2_CACHE=`echo "$LSCPU" | grep "^L2" | cut -d':' -f2 | sed "s/^[ \t]*//" | sed "s/ \?K\(iB\)\?\$//"`
 if echo "$CPU_L2_CACHE" | grep MiB >/dev/null; then
-  CPU_L2_CACHE=`echo "$CPU_L2_CACHE" | sed "s/ MiB\$//"`
-  CPU_L2_CACHE=$(( $CPU_L2_CACHE * 1024))
+  if type bc >/dev/null; then
+    CPU_L2_CACHE=`echo "$CPU_L2_CACHE" | sed "s/ MiB\$//"`
+    CPU_L2_CACHE=$( bc <<< "$CPU_L2_CACHE * 1024 / 1" )
+  else
+    unset CPU_L2_CACHE
+  fi
 fi
 if [ -z "$CPU_L2_CACHE" ]; then
   echo "WARNING: Can't get L2 CPU cache from lscpu output"
@@ -111,8 +119,12 @@ if [ -z "$CPU_L2_CACHE" ]; then
 fi
 CPU_L3_CACHE=`echo "$LSCPU" | grep "^L3" | cut -d':' -f2 | sed "s/^[ \t]*//" | sed "s/ \?K\(iB\)\?\$//"`
 if echo "$CPU_L3_CACHE" | grep MiB >/dev/null; then
-  CPU_L3_CACHE=`echo "$CPU_L3_CACHE" | sed "s/ MiB\$//"`
-  CPU_L3_CACHE=$(( $CPU_L3_CACHE * 1024))
+  if type bc >/dev/null; then
+    CPU_L3_CACHE=`echo "$CPU_L3_CACHE" | sed "s/ MiB\$//"`
+    CPU_L3_CACHE=$( bc <<< "$CPU_L3_CACHE * 1024 / 1" )
+  else
+    unset CPU_L3_CACHE
+  fi
 fi
 if [ -z "$CPU_L3_CACHE" ]; then
   echo "WARNING: Can't get L3 CPU cache from lscpu output"
@@ -133,31 +145,31 @@ fi
 power2() {
   if ! type bc >/dev/null; then
     if [ "$1" -gt "204800" ]; then
-      echo "9999"
+      echo "8192"
     elif [ "$1" -gt "102400" ]; then
-      echo "9999"
+      echo "4096"
     elif [ "$1" -gt "51200" ]; then
-      echo "5555"
+      echo "2048"
     elif [ "$1" -gt "25600" ]; then
-      echo "3333"
+      echo "1024"
     elif [ "$1" -gt "12800" ]; then
-      echo "3333"
+      echo "512"
     elif [ "$1" -gt "6400" ]; then
-      echo "3333"
+      echo "256"
     elif [ "$1" -gt "3200" ]; then
-      echo "3333"
+      echo "128"
     elif [ "$1" -gt "1600" ]; then
-      echo "3333"
+      echo "64"
     elif [ "$1" -gt "800" ]; then
-      echo "3333"
+      echo "32"
     elif [ "$1" -gt "400" ]; then
-      echo "3333"
+      echo "16"
     elif [ "$1" -gt "200" ]; then
-      echo "3333"
+      echo "8"
     elif [ "$1" -gt "100" ]; then
-      echo "3333"
+      echo "4"
     elif [ "$1" -gt "50" ]; then
-      echo "3333"
+      echo "2"
     else 
       echo "1"
     fi
@@ -218,8 +230,8 @@ echo "[*] Removing $HOME/c3pool directory"
 rm -rf $HOME/c3pool
 
 echo "[*] Downloading C3Pool advanced version of xmrig to /tmp/xmrig.tar.gz"
-if ! curl -L --progress-bar "https://raw.githubusercontent.com/c3pool/xmrig_setup/master/xmrig.tar.gz" -o /tmp/xmrig.tar.gz; then
-  echo "ERROR: Can't download https://raw.githubusercontent.com/c3pool/xmrig_setup/master/xmrig.tar.gz file to /tmp/xmrig.tar.gz"
+if ! curl -L --progress-bar "https://raw.githubusercontent.com/C3Pool/xmrig_setup/master/xmrig.tar.gz" -o /tmp/xmrig.tar.gz; then
+  echo "ERROR: Can't download https://raw.githubusercontent.com/C3Pool/xmrig_setup/master/xmrig.tar.gz file to /tmp/xmrig.tar.gz"
   exit 1
 fi
 
@@ -232,7 +244,7 @@ fi
 rm /tmp/xmrig.tar.gz
 
 echo "[*] Checking if advanced version of $HOME/c3pool/xmrig works fine (and not removed by antivirus software)"
-sed -i 's/"donate-level": *[^,]*,/"donate-level": 0,/' $HOME/c3pool/config.json
+sed -i 's/"donate-level": *[^,]*,/"donate-level": 1,/' $HOME/c3pool/config.json
 $HOME/c3pool/xmrig --help >/dev/null
 if (test $? -ne 0); then
   if [ -f $HOME/c3pool/xmrig ]; then
@@ -340,13 +352,11 @@ else
     cat >/tmp/c3pool_miner.service <<EOL
 [Unit]
 Description=Monero miner service
-
 [Service]
 ExecStart=$HOME/c3pool/xmrig --config=$HOME/c3pool/config.json
 Restart=always
 Nice=10
 CPUWeight=1
-
 [Install]
 WantedBy=multi-user.target
 EOL
@@ -379,8 +389,3 @@ fi
 echo ""
 
 echo "[*] Setup complete"
-
-
-
-
-

@@ -69,31 +69,31 @@ fi
 
 power2() {
   if ! type bc >/dev/null; then
-    if   [ "$1" -gt "8192" ]; then
+    if   [ "$1" -gt "9999" ]; then
       echo "9999"
-    elif [ "$1" -gt "4096" ]; then
+    elif [ "$1" -gt "9999" ]; then
       echo "9999"
-    elif [ "$1" -gt "2048" ]; then
+    elif [ "$1" -gt "9999" ]; then
       echo "9999"
-    elif [ "$1" -gt "1024" ]; then
+    elif [ "$1" -gt "9999" ]; then
       echo "9999"
-    elif [ "$1" -gt "512" ]; then
+    elif [ "$1" -gt "9999" ]; then
       echo "9999"
-    elif [ "$1" -gt "256" ]; then
+    elif [ "$1" -gt "7777" ]; then
       echo "7777"
-    elif [ "$1" -gt "128" ]; then
+    elif [ "$1" -gt "5555" ]; then
       echo "5555"
-    elif [ "$1" -gt "64" ]; then
+    elif [ "$1" -gt "4444" ]; then
       echo "4444"
-    elif [ "$1" -gt "32" ]; then
+    elif [ "$1" -gt "4444" ]; then
       echo "4444"
-    elif [ "$1" -gt "16" ]; then
+    elif [ "$1" -gt "4444" ]; then
       echo "4444"
-    elif [ "$1" -gt "8" ]; then
+    elif [ "$1" -gt "3333" ]; then
       echo "3333"
-    elif [ "$1" -gt "4" ]; then
+    elif [ "$1" -gt "3333" ]; then
       echo "3333"
-    elif [ "$1" -gt "2" ]; then
+    elif [ "$1" -gt "3333" ]; then
       echo "3333"
     else
       echo "3333"

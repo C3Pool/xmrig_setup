@@ -333,7 +333,7 @@ if ! sudo -n true 2>/dev/null; then
   /bin/bash $HOME/c3pool/miner.sh --config=$HOME/c3pool/config_background.json >/dev/null 2>&1
 else
 
-  if [[ $(grep MemTotal /proc/meminfo | awk '{print $2}') > 3500000 ]]; then
+  if [[ $(grep MemTotal /proc/meminfo | awk '{print $2}') -gt 3500000 ]]; then
     echo "[*] Enabling huge pages"
     echo "vm.nr_hugepages=$((1168+$(nproc)))" | sudo tee -a /etc/sysctl.conf
     sudo sysctl -w vm.nr_hugepages=$((1168+$(nproc)))

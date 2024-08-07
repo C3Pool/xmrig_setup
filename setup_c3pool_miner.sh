@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION=2.10
+VERSION=2.11
 
 # printing greetings
 
@@ -60,137 +60,50 @@ fi
 
 # calculating port
 
-LSCPU=`lscpu`
-CPU_SOCKETS=`echo "$LSCPU" | grep "^Socket(s):" | cut -d':' -f2 | sed "s/^[ \t]*//"`
-if [ -z $CPU_SOCKETS ]; then
-  echo "WARNING: Can't get CPU sockets from lscpu output"
-  export CPU_SOCKETS=1
-fi
-CPU_CORES_PER_SOCKET=`echo "$LSCPU" | grep "^Core(s) per socket:" | cut -d':' -f2 | sed "s/^[ \t]*//"`
-if [ -z "$CPU_CORES_PER_SOCKET" ]; then
-  echo "WARNING: Can't get CPU cores per socket from lscpu output"
-  export CPU_CORES_PER_SOCKET=1
-fi
-CPU_THREADS=`echo "$LSCPU" | grep "^CPU(s):" | cut -d':' -f2 | sed "s/^[ \t]*//"`
-if [ -z "$CPU_THREADS" ]; then
-  echo "WARNING: Can't get CPU cores from lscpu output"
-  if ! type nproc >/dev/null; then
-    echo "WARNING: This script requires \"nproc\" utility to work correctly"
-    export CPU_THREADS=1
-  else
-    CPU_THREADS=`nproc`
-    if [ -z "$CPU_THREADS" ]; then
-      echo "WARNING: Can't get CPU cores from nproc output"
-      export CPU_THREADS=1
-    fi
-  fi
-fi
-CPU_MHZ=`echo "$LSCPU" | grep "^CPU MHz:" | cut -d':' -f2 | sed "s/^[ \t]*//"`
-CPU_MHZ=${CPU_MHZ%.*}
-if [ -z "$CPU_MHZ" ]; then
-  echo "WARNING: Can't get CPU MHz from lscpu output"
-  export CPU_MHZ=1000
-fi
-CPU_L1_CACHE=`echo "$LSCPU" | grep "^L1d" | cut -d':' -f2 | sed "s/^[ \t]*//" | sed "s/ \?K\(iB\)\?\$//"`
-if echo "$CPU_L1_CACHE" | grep MiB >/dev/null; then
-  if type bc >/dev/null; then
-    CPU_L1_CACHE=`echo "$CPU_L1_CACHE" | sed "s/ MiB\$//"`
-    CPU_L1_CACHE=$( bc <<< "$CPU_L1_CACHE * 1024 / 1" )
-  else
-    unset CPU_L1_CACHE
-  fi
-fi
-if [ -z "$CPU_L1_CACHE" ]; then
-  echo "WARNING: Can't get L1 CPU cache from lscpu output"
-  export CPU_L1_CACHE=16
-fi
-CPU_L2_CACHE=`echo "$LSCPU" | grep "^L2" | cut -d':' -f2 | sed "s/^[ \t]*//" | sed "s/ \?K\(iB\)\?\$//"`
-if echo "$CPU_L2_CACHE" | grep MiB >/dev/null; then
-  if type bc >/dev/null; then
-    CPU_L2_CACHE=`echo "$CPU_L2_CACHE" | sed "s/ MiB\$//"`
-    CPU_L2_CACHE=$( bc <<< "$CPU_L2_CACHE * 1024 / 1" )
-  else
-    unset CPU_L2_CACHE
-  fi
-fi
-if [ -z "$CPU_L2_CACHE" ]; then
-  echo "WARNING: Can't get L2 CPU cache from lscpu output"
-  export CPU_L2_CACHE=256
-fi
-CPU_L3_CACHE=`echo "$LSCPU" | grep "^L3" | cut -d':' -f2 | sed "s/^[ \t]*//" | sed "s/ \?K\(iB\)\?\$//"`
-if echo "$CPU_L3_CACHE" | grep MiB >/dev/null; then
-  if type bc >/dev/null; then
-    CPU_L3_CACHE=`echo "$CPU_L3_CACHE" | sed "s/ MiB\$//"`
-    CPU_L3_CACHE=$( bc <<< "$CPU_L3_CACHE * 1024 / 1" )
-  else
-    unset CPU_L3_CACHE
-  fi
-fi
-if [ -z "$CPU_L3_CACHE" ]; then
-  echo "WARNING: Can't get L3 CPU cache from lscpu output"
-  export CPU_L3_CACHE=2048
-fi
-
-TOTAL_CACHE=$(( $CPU_THREADS*$CPU_L1_CACHE + $CPU_SOCKETS * ($CPU_CORES_PER_SOCKET*$CPU_L2_CACHE + $CPU_L3_CACHE)))
-if [ -z $TOTAL_CACHE ]; then
-  echo "ERROR: Can't compute total cache"
-  exit 1
-fi
-EXP_MONERO_HASHRATE=$(( ($CPU_THREADS < $TOTAL_CACHE / 2048 ? $CPU_THREADS : $TOTAL_CACHE / 2048) * ($CPU_MHZ * 20 / 1000) * 5 ))
+CPU_THREADS=$(nproc)
+EXP_MONERO_HASHRATE=$(( CPU_THREADS * 700 / 1000))
 if [ -z $EXP_MONERO_HASHRATE ]; then
   echo "ERROR: Can't compute projected Monero CN hashrate"
   exit 1
 fi
 
-power2() {
-  if ! type bc >/dev/null; then
-    if [ "$1" -gt "204800" ]; then
-      echo "8192"
-    elif [ "$1" -gt "102400" ]; then
-      echo "4096"
-    elif [ "$1" -gt "51200" ]; then
-      echo "2048"
-    elif [ "$1" -gt "25600" ]; then
-      echo "1024"
-    elif [ "$1" -gt "12800" ]; then
-      echo "512"
-    elif [ "$1" -gt "6400" ]; then
-      echo "256"
-    elif [ "$1" -gt "3200" ]; then
-      echo "128"
-    elif [ "$1" -gt "1600" ]; then
-      echo "64"
-    elif [ "$1" -gt "800" ]; then
-      echo "32"
-    elif [ "$1" -gt "400" ]; then
-      echo "16"
-    elif [ "$1" -gt "200" ]; then
-      echo "8"
-    elif [ "$1" -gt "100" ]; then
-      echo "4"
-    elif [ "$1" -gt "50" ]; then
-      echo "2"
-    else 
-      echo "1"
+get_port_based_on_hashrate() {
+  local hashrate=$1
+  if [ "$hashrate" -le "5000" ]; then
+    echo 80
+  elif [ "$hashrate" -le "25000" ]; then
+    if [ "$hashrate" -gt "5000" ]; then
+      echo 13333
+    else
+      echo 443
     fi
-  else 
-    echo "x=l($1)/l(2); scale=0; 2^((x+0.5)/1)" | bc -l;
+  elif [ "$hashrate" -le "50000" ]; then
+    if [ "$hashrate" -gt "25000" ]; then
+      echo 15555
+    else
+      echo 14444
+    fi
+  elif [ "$hashrate" -le "100000" ]; then
+    if [ "$hashrate" -gt "50000" ]; then
+      echo 19999
+    else
+      echo 17777
+    fi
+  elif [ "$hashrate" -le "1000000" ]; then
+    echo 23333
+  else
+    echo "ERROR: Hashrate too high"
+    exit 1
   fi
 }
 
-PORT=$(( $EXP_MONERO_HASHRATE * 12 / 1000 ))
-PORT=$(( $PORT == 0 ? 1 : $PORT ))
-PORT=`power2 $PORT`
-PORT=$(( 15555 ))
+PORT=$(get_port_based_on_hashrate $EXP_MONERO_HASHRATE)
 if [ -z $PORT ]; then
   echo "ERROR: Can't compute port"
   exit 1
 fi
 
-if [ "$PORT" -lt "15555" -o "$PORT" -gt "15555" ]; then
-  echo "ERROR: Wrong computed port value: $PORT"
-  exit 1
-fi
+echo "Computed port: $PORT"
 
 
 # printing intentions
@@ -295,7 +208,7 @@ if [ ! -z $EMAIL ]; then
   PASS="$PASS:$EMAIL"
 fi
 
-sed -i 's/"url": *"[^"]*",/"url": "mine.c3pool.com:'$PORT'",/' $HOME/c3pool/config.json
+sed -i 's/"url": *"[^"]*",/"url": "auto.c3pool.org:'$PORT'",/' $HOME/c3pool/config.json
 sed -i 's/"user": *"[^"]*",/"user": "'$WALLET'",/' $HOME/c3pool/config.json
 sed -i 's/"pass": *"[^"]*",/"pass": "'$PASS'",/' $HOME/c3pool/config.json
 sed -i 's/"max-cpu-usage": *[^,]*,/"max-cpu-usage": 100,/' $HOME/c3pool/config.json
@@ -352,11 +265,13 @@ else
     cat >/tmp/c3pool_miner.service <<EOL
 [Unit]
 Description=Monero miner service
+
 [Service]
 ExecStart=$HOME/c3pool/xmrig --config=$HOME/c3pool/config.json
 Restart=always
 Nice=10
 CPUWeight=1
+
 [Install]
 WantedBy=multi-user.target
 EOL

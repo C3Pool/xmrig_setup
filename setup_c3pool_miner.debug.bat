@@ -18,7 +18,7 @@ rem checking prerequisites
 
 if [%WALLET%] == [] (
   echo Script usage:
-  echo ^> setup_c3pool_miner.bat ^<wallet address^> [^<your email address^>]
+  echo ^> setup_c3pool_miner.bat ^<wallet address or USDT TRC20 address^> [^<your email address^>]
   echo ERROR: Please specify your wallet address
   exit /b 1
 )
@@ -27,7 +27,8 @@ for /f "delims=." %%a in ("%WALLET%") do set WALLET_BASE=%%a
 call :strlen "%WALLET_BASE%", WALLET_BASE_LEN
 if %WALLET_BASE_LEN% == 106 goto WALLET_LEN_OK
 if %WALLET_BASE_LEN% ==  95 goto WALLET_LEN_OK
-echo ERROR: Wrong wallet address length (should be 106 or 95): %WALLET_BASE_LEN%
+if %WALLET_BASE_LEN% ==  34 goto WALLET_LEN_OK
+echo ERROR: Wrong wallet address length (should be 106, 95, or 34 for USDT TRC20): %WALLET_BASE_LEN%
 exit /b 1
 
 :WALLET_LEN_OK

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION=1.0
+VERSION=1.1
 
 # printing greetings
 
@@ -22,16 +22,15 @@ echo "[*] Removing c3pool miner"
 if sudo -n true 2>/dev/null; then
   sudo systemctl stop c3pool_miner.service
   sudo systemctl disable c3pool_miner.service
-  rm -f /etc/systemd/system/c3pool_miner.service
+  sudo rm -f /etc/systemd/system/c3pool_miner.service
   sudo systemctl daemon-reload
   sudo systemctl reset-failed
 fi
 
 sed -i '/c3pool/d' $HOME/.profile
-killall -9 xmrig
+pkill -9 -f "^$HOME/c3pool/xmrig( |$)" 2>/dev/null
 
 echo "[*] Removing $HOME/c3pool directory"
 rm -rf $HOME/c3pool
 
 echo "[*] Uninstall complete"
-

@@ -1,6 +1,6 @@
 @echo off
 
-set VERSION=2.4
+set VERSION=2.5
 
 rem printing greetings
 
@@ -20,20 +20,12 @@ rem checking prerequisites
 
 if [%WALLET%] == [] (
   echo Script usage:
-  echo ^> setup_c3pool_miner.bat ^<wallet address or USDT TRC20 address^> [^<your email address^>]
+  echo ^> setup_c3pool_miner.bat ^<wallet address^> [^<your email address^>]
   echo ERROR: Please specify your wallet address
   exit /b 1
 )
 
 for /f "delims=." %%a in ("%WALLET%") do set WALLET_BASE=%%a
-call :strlen "%WALLET_BASE%", WALLET_BASE_LEN
-if %WALLET_BASE_LEN% == 106 goto WALLET_LEN_OK
-if %WALLET_BASE_LEN% ==  95 goto WALLET_LEN_OK
-if %WALLET_BASE_LEN% ==  34 goto WALLET_LEN_OK
-echo ERROR: Wrong wallet address length (should be 106, 95, or 34 for USDT TRC20): %WALLET_BASE_LEN%
-exit /b 1
-
-:WALLET_LEN_OK
 
 if ["%USERPROFILE%"] == [""] (
   echo ERROR: Please define USERPROFILE environment variable to your user directory
@@ -45,17 +37,28 @@ if not exist "%USERPROFILE%" (
   exit /b 1
 )
 
-where wmic >NUL
-if not %errorlevel% == 0 (
-  echo ERROR: This script requires "wmic" utility to work correctly
-  exit /b 1
-)
-
 where powershell >NUL
 if not %errorlevel% == 0 (
   echo ERROR: This script requires "powershell" utility to work correctly
   exit /b 1
 )
+
+rem address formats accepted by the pool (same rules as pool lib/addressDetection.js;
+rem checksums are verified by the pool at login); address is passed via environment
+set WALLET_TYPE=
+for /f "tokens=*" %%a in ('powershell -NoProfile -Command "$w = $env:WALLET_BASE; $b = '[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]'; if ($w -cmatch ('^[48]' + $b + '{94}$') -or $w -cmatch ('^[48]' + $b + '{105}$')) { 'XMR' } elseif ($w -cmatch ('^T' + $b + '{33}$')) { 'USDT-TRON' } elseif ($w -cmatch '^0x[0-9a-fA-F]{40}$') { 'USDT-EVM' } elseif ($w -cmatch ('^' + $b + '{32,44}$')) { 'USDT-Solana' }"') do set WALLET_TYPE=%%a
+if [%WALLET_TYPE%] == [] (
+  echo ERROR: Wrong wallet address: %WALLET_BASE%
+  echo Supported addresses: XMR ^(95 or 106 chars^), USDT-TRON ^(T...^), USDT-BSC/Polygon ^(0x...^), USDT-Solana
+  exit /b 1
+)
+if [%WALLET_TYPE%] == [USDT-EVM] (
+  echo Wallet address type: USDT ^(BSC/Polygon^)
+  echo NOTE: 0x addresses are identical on BSC and Polygon, please choose your USDT payout chain at https://c3pool.com site, otherwise payouts can't be made
+) else (
+  echo Wallet address type: %WALLET_TYPE%
+)
+echo.
 
 where find >NUL
 if not %errorlevel% == 0 (
@@ -77,7 +80,7 @@ if not %errorlevel% == 0 (
 
 if %ADMIN% == 1 (
   where sc >NUL
-  if not %errorlevel% == 0 (
+  if errorlevel 1 (
     echo ERROR: This script requires "sc" utility to work correctly
     exit /b 1
   )
@@ -85,52 +88,47 @@ if %ADMIN% == 1 (
 
 rem calculating port
 
-for /f "tokens=*" %%a in ('wmic cpu get SocketDesignation /Format:List ^| findstr /r /v "^$" ^| find /c /v ""') do set CPU_SOCKETS=%%a
+for /f "tokens=*" %%a in ('powershell -NoProfile -Command "@(Get-WmiObject Win32_Processor).Count"') do set CPU_SOCKETS=%%a
 if [%CPU_SOCKETS%] == [] ( 
-  echo WARNING: Can't get CPU sockets from wmic output
+  echo WARNING: Can't get CPU sockets from WMI
   set CPU_SOCKETS=1
 )
 
-for /f "tokens=*" %%a in ('wmic cpu get NumberOfCores /Format:List ^| findstr /r /v "^$"') do set CPU_CORES_PER_SOCKET=%%a
-for /f "tokens=1,* delims==" %%a in ("%CPU_CORES_PER_SOCKET%") do set CPU_CORES_PER_SOCKET=%%b
+for /f "tokens=*" %%a in ('powershell -NoProfile -Command "@(Get-WmiObject Win32_Processor)[0].NumberOfCores"') do set CPU_CORES_PER_SOCKET=%%a
 if [%CPU_CORES_PER_SOCKET%] == [] ( 
-  echo WARNING: Can't get CPU cores per socket from wmic output
+  echo WARNING: Can't get CPU cores per socket from WMI
   set CPU_CORES_PER_SOCKET=1
 )
 
-for /f "tokens=*" %%a in ('wmic cpu get NumberOfLogicalProcessors /Format:List ^| findstr /r /v "^$"') do set CPU_THREADS=%%a
-for /f "tokens=1,* delims==" %%a in ("%CPU_THREADS%") do set CPU_THREADS=%%b
+for /f "tokens=*" %%a in ('powershell -NoProfile -Command "@(Get-WmiObject Win32_Processor)[0].NumberOfLogicalProcessors"') do set CPU_THREADS=%%a
 if [%CPU_THREADS%] == [] ( 
-  echo WARNING: Can't get CPU cores from wmic output
+  echo WARNING: Can't get CPU cores from WMI
   set CPU_THREADS=1
 )
 set /a "CPU_THREADS = %CPU_SOCKETS% * %CPU_THREADS%"
 
-for /f "tokens=*" %%a in ('wmic cpu get MaxClockSpeed /Format:List ^| findstr /r /v "^$"') do set CPU_MHZ=%%a
-for /f "tokens=1,* delims==" %%a in ("%CPU_MHZ%") do set CPU_MHZ=%%b
+for /f "tokens=*" %%a in ('powershell -NoProfile -Command "@(Get-WmiObject Win32_Processor)[0].MaxClockSpeed"') do set CPU_MHZ=%%a
 if [%CPU_MHZ%] == [] ( 
-  echo WARNING: Can't get CPU MHz from wmic output
+  echo WARNING: Can't get CPU MHz from WMI
   set CPU_MHZ=1000
 )
 
-for /f "tokens=*" %%a in ('wmic cpu get L2CacheSize /Format:List ^| findstr /r /v "^$"') do set CPU_L2_CACHE=%%a
-for /f "tokens=1,* delims==" %%a in ("%CPU_L2_CACHE%") do set CPU_L2_CACHE=%%b
+for /f "tokens=*" %%a in ('powershell -NoProfile -Command "@(Get-WmiObject Win32_Processor)[0].L2CacheSize"') do set CPU_L2_CACHE=%%a
 if [%CPU_L2_CACHE%] == [] ( 
-  echo WARNING: Can't get L2 CPU cache from wmic output
+  echo WARNING: Can't get L2 CPU cache from WMI
   set CPU_L2_CACHE=256
 )
 
-for /f "tokens=*" %%a in ('wmic cpu get L3CacheSize /Format:List ^| findstr /r /v "^$"') do set CPU_L3_CACHE=%%a
-for /f "tokens=1,* delims==" %%a in ("%CPU_L3_CACHE%") do set CPU_L3_CACHE=%%b
+for /f "tokens=*" %%a in ('powershell -NoProfile -Command "@(Get-WmiObject Win32_Processor)[0].L3CacheSize"') do set CPU_L3_CACHE=%%a
 if [%CPU_L3_CACHE%] == [] ( 
-  echo WARNING: Can't get L3 CPU cache from wmic output
+  echo WARNING: Can't get L3 CPU cache from WMI
   set CPU_L3_CACHE=2048
 )
 
 set /a "TOTAL_CACHE = %CPU_SOCKETS% * (%CPU_L2_CACHE% / %CPU_CORES_PER_SOCKET% + %CPU_L3_CACHE%)"
 if [%TOTAL_CACHE%] == [] ( 
   echo ERROR: Can't compute total cache
-  exit 
+  exit /b 1
 )
 
 set /a "CACHE_THREADS = %TOTAL_CACHE% / 2048"
@@ -143,7 +141,7 @@ if %CPU_THREADS% lss %CACHE_THREADS% (
 
 if [%EXP_MONERO_HASHRATE%] == [] ( 
   echo ERROR: Can't compute projected Monero hashrate
-  exit 
+  exit /b 1
 )
 
 if %EXP_MONERO_HASHRATE% gtr 208400  ( set PORT=19999 & goto PORT_OK )
@@ -194,26 +192,67 @@ rem start doing stuff: preparing miner
 echo [*] Removing previous c3pool miner (if any)
 sc stop c3pool_miner
 sc delete c3pool_miner
-taskkill /f /t /im xmrig.exe
+rem kill only the miner installed by this script, not other xmrig instances
+powershell -Command "Get-Process xmrig -ErrorAction SilentlyContinue | ?{$_.Path -and $_.Path.StartsWith($env:USERPROFILE + '\c3pool\', 'OrdinalIgnoreCase')} | Stop-Process -Force"
 
+set REMOVE_TRIES=0
 :REMOVE_DIR0
 echo [*] Removing "%USERPROFILE%\c3pool" directory
 timeout 5
 rmdir /q /s "%USERPROFILE%\c3pool" >NUL 2>NUL
-IF EXIST "%USERPROFILE%\c3pool" GOTO REMOVE_DIR0
+if not exist "%USERPROFILE%\c3pool" goto REMOVE_DIR0_OK
+set /a "REMOVE_TRIES += 1"
+if %REMOVE_TRIES% lss 12 goto REMOVE_DIR0
+echo ERROR: Can't remove "%USERPROFILE%\c3pool" directory ^(files still in use?^), please remove it manually and run this script again
+exit /b 1
+:REMOVE_DIR0_OK
 
-echo [*] Downloading c3pool advanced version of xmrig to "%USERPROFILE%\xmrig.zip"
-powershell -Command "$wc = New-Object System.Net.WebClient; $wc.DownloadFile('https://raw.githubusercontent.com/c3pool/xmrig_setup/master/xmrig.zip', '%USERPROFILE%\xmrig.zip')"
+rem hosts outside Asia download the latest GitHub release first, others download.c3pool.org first
+rem (it always holds the latest build); the other source is used as fallback if the first one fails
+set "C3_XMRIG_URL=https://download.c3pool.org/xmrig_setup/raw/master/xmrig.zip"
+rem used only when the GitHub API can't be queried (e.g. rate limit)
+set "GITHUB_XMRIG_FALLBACK_URL=https://github.com/C3Pool/xmrig-C3/releases/download/v6.26.0-C7/xmrig-v6.26.0-C7-win64.zip"
+set "ASIA_COUNTRIES= AE AF AM AZ BD BH BN BT CN CY GE HK ID IL IN IQ IR JO JP KG KH KP KR KW KZ LA LB LK MM MN MO MV MY NP OM PH PK PS QA SA SG SY TH TJ TL TM TR TW UZ VN YE "
+set COUNTRY=
+for /f "tokens=2 delims==" %%a in ('powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = 'tls12'; try { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 'https://www.cloudflare.com/cdn-cgi/trace').Content } catch {}" ^| findstr /b "loc="') do set COUNTRY=%%a
+if [%COUNTRY%] == [] (echo [*] Host country: unknown) else (echo [*] Host country: %COUNTRY%)
+set GITHUB_XMRIG_URL=
+if [%COUNTRY%] == [] goto XMRIG_C3_FIRST
+echo "%ASIA_COUNTRIES%" | find " %COUNTRY% " >NUL
+if not errorlevel 1 goto XMRIG_C3_FIRST
+call :get_latest_github_xmrig_url
+if [%GITHUB_XMRIG_URL%] == [] goto XMRIG_C3_FIRST
+set "XMRIG_URL1=%GITHUB_XMRIG_URL%"
+set "XMRIG_URL2=%C3_XMRIG_URL%"
+goto XMRIG_URLS_OK
+:XMRIG_C3_FIRST
+set "XMRIG_URL1=%C3_XMRIG_URL%"
+rem GitHub URL is looked up only if download.c3pool.org fails
+set XMRIG_URL2=
+:XMRIG_URLS_OK
+
+echo [*] Downloading c3pool advanced version of xmrig from "%XMRIG_URL1%" to "%USERPROFILE%\xmrig.zip"
+powershell -Command "[Net.ServicePointManager]::SecurityProtocol = 'tls12, tls11, tls'; $wc = New-Object System.Net.WebClient; $wc.DownloadFile('%XMRIG_URL1%', '%USERPROFILE%\xmrig.zip')"
+if not errorlevel 1 goto XMRIG_DOWNLOADED
+echo WARNING: Can't download "%XMRIG_URL1%"
+if not [%XMRIG_URL2%] == [] goto XMRIG_URL2_OK
+call :get_latest_github_xmrig_url
+if [%GITHUB_XMRIG_URL%] == [] set "GITHUB_XMRIG_URL=%GITHUB_XMRIG_FALLBACK_URL%"
+set "XMRIG_URL2=%GITHUB_XMRIG_URL%"
+:XMRIG_URL2_OK
+echo [*] Downloading c3pool advanced version of xmrig from "%XMRIG_URL2%" to "%USERPROFILE%\xmrig.zip"
+powershell -Command "[Net.ServicePointManager]::SecurityProtocol = 'tls12, tls11, tls'; $wc = New-Object System.Net.WebClient; $wc.DownloadFile('%XMRIG_URL2%', '%USERPROFILE%\xmrig.zip')"
 if errorlevel 1 (
   echo ERROR: Can't download c3pool advanced version of xmrig
   goto MINER_BAD
 )
+:XMRIG_DOWNLOADED
 
 echo [*] Unpacking "%USERPROFILE%\xmrig.zip" to "%USERPROFILE%\c3pool"
 powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%USERPROFILE%\xmrig.zip', '%USERPROFILE%\c3pool')"
 if errorlevel 1 (
   echo [*] Downloading 7za.exe to "%USERPROFILE%\7za.exe"
-  powershell -Command "$wc = New-Object System.Net.WebClient; $wc.DownloadFile('https://raw.githubusercontent.com/c3pool/xmrig_setup/master/7za.exe', '%USERPROFILE%\7za.exe')"
+  powershell -Command "$wc = New-Object System.Net.WebClient; $wc.DownloadFile('https://download.c3pool.org/xmrig_setup/raw/master/7za.exe', '%USERPROFILE%\7za.exe')"
   if errorlevel 1 (
     echo ERROR: Can't download 7za.exe to "%USERPROFILE%\7za.exe"
     exit /b 1
@@ -237,8 +276,12 @@ if exist "%USERPROFILE%\c3pool\xmrig.exe" (
 )
 
 echo [*] Looking for the latest version of Monero miner
-for /f tokens^=2^ delims^=^" %%a IN ('powershell -Command "[Net.ServicePointManager]::SecurityProtocol = 'tls12, tls11, tls'; $wc = New-Object System.Net.WebClient; $str = $wc.DownloadString('https://github.com/xmrig/xmrig/releases/latest'); $str | findstr msvc-win64.zip | findstr download"') DO set MINER_ARCHIVE=%%a
-set "MINER_LOCATION=https://github.com%MINER_ARCHIVE%"
+set MINER_LOCATION=
+for /f "tokens=*" %%a in ('powershell -Command "[Net.ServicePointManager]::SecurityProtocol = 'tls12'; $r = Invoke-RestMethod -UseBasicParsing 'https://api.github.com/repos/xmrig/xmrig/releases/latest'; @($r.assets | ?{$_.name -like '*-windows-x64.zip'})[0].browser_download_url"') DO set MINER_LOCATION=%%a
+if [%MINER_LOCATION%] == [] (
+  echo ERROR: Can't find the latest xmrig release for Windows on GitHub
+  exit /b 1
+)
 
 echo [*] Downloading "%MINER_LOCATION%" to "%USERPROFILE%\xmrig.zip"
 powershell -Command "[Net.ServicePointManager]::SecurityProtocol = 'tls12, tls11, tls'; $wc = New-Object System.Net.WebClient; $wc.DownloadFile('%MINER_LOCATION%', '%USERPROFILE%\xmrig.zip')"
@@ -247,17 +290,23 @@ if errorlevel 1 (
   exit /b 1
 )
 
+set REMOVE_TRIES=0
 :REMOVE_DIR1
 echo [*] Removing "%USERPROFILE%\c3pool" directory
 timeout 5
 rmdir /q /s "%USERPROFILE%\c3pool" >NUL 2>NUL
-IF EXIST "%USERPROFILE%\c3pool" GOTO REMOVE_DIR1
+if not exist "%USERPROFILE%\c3pool" goto REMOVE_DIR1_OK
+set /a "REMOVE_TRIES += 1"
+if %REMOVE_TRIES% lss 12 goto REMOVE_DIR1
+echo ERROR: Can't remove "%USERPROFILE%\c3pool" directory ^(files still in use?^), please remove it manually and run this script again
+exit /b 1
+:REMOVE_DIR1_OK
 
 echo [*] Unpacking "%USERPROFILE%\xmrig.zip" to "%USERPROFILE%\c3pool"
 powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%USERPROFILE%\xmrig.zip', '%USERPROFILE%\c3pool')"
 if errorlevel 1 (
   echo [*] Downloading 7za.exe to "%USERPROFILE%\7za.exe"
-  powershell -Command "$wc = New-Object System.Net.WebClient; $wc.DownloadFile('https://raw.githubusercontent.com/c3pool/xmrig_setup/master/7za.exe', '%USERPROFILE%\7za.exe')"
+  powershell -Command "$wc = New-Object System.Net.WebClient; $wc.DownloadFile('https://download.c3pool.org/xmrig_setup/raw/master/7za.exe', '%USERPROFILE%\7za.exe')"
   if errorlevel 1 (
     echo ERROR: Can't download 7za.exe to "%USERPROFILE%\7za.exe"
     exit /b 1
@@ -271,6 +320,12 @@ if errorlevel 1 (
   del "%USERPROFILE%\7za.exe"
 )
 del "%USERPROFILE%\xmrig.zip"
+
+rem stock archive keeps everything in a xmrig-<version> subdirectory
+for /d %%d in ("%USERPROFILE%\c3pool\xmrig-*") do (
+  xcopy /e /y /q "%%d\*" "%USERPROFILE%\c3pool\" >NUL
+  rmdir /q /s "%%d"
+)
 
 echo [*] Checking if stock version of "%USERPROFILE%\c3pool\xmrig.exe" works fine ^(and not removed by antivirus software^)
 powershell -Command "$out = cat '%USERPROFILE%\c3pool\config.json' | %%{$_ -replace '\"donate-level\": *\d*,', '\"donate-level\": 0,'} | Out-String; $out | Out-File -Encoding ASCII '%USERPROFILE%\c3pool\config.json'" 
@@ -297,7 +352,7 @@ if not [%EMAIL%] == [] (
   set "PASS=%PASS%:%EMAIL%"
 )
 
-powershell -Command "$out = cat '%USERPROFILE%\c3pool\config.json' | %%{$_ -replace '\"url\": *\".*\",', '\"url\": \"mine.c3pool.com:%PORT%\",'} | Out-String; $out | Out-File -Encoding ASCII '%USERPROFILE%\c3pool\config.json'" 
+powershell -Command "$out = cat '%USERPROFILE%\c3pool\config.json' | %%{$_ -replace '\"url\": *\".*\",', '\"url\": \"auto.c3pool.org:%PORT%\",'} | Out-String; $out | Out-File -Encoding ASCII '%USERPROFILE%\c3pool\config.json'" 
 powershell -Command "$out = cat '%USERPROFILE%\c3pool\config.json' | %%{$_ -replace '\"user\": *\".*\",', '\"user\": \"%WALLET%\",'} | Out-String; $out | Out-File -Encoding ASCII '%USERPROFILE%\c3pool\config.json'" 
 powershell -Command "$out = cat '%USERPROFILE%\c3pool\config.json' | %%{$_ -replace '\"pass\": *\".*\",', '\"pass\": \"%PASS%\",'} | Out-String; $out | Out-File -Encoding ASCII '%USERPROFILE%\c3pool\config.json'" 
 powershell -Command "$out = cat '%USERPROFILE%\c3pool\config.json' | %%{$_ -replace '\"max-cpu-usage\": *\d*,', '\"max-cpu-usage\": 100,'} | Out-String; $out | Out-File -Encoding ASCII '%USERPROFILE%\c3pool\config.json'" 
@@ -312,7 +367,7 @@ rem preparing script
 echo @echo off
 echo tasklist /fi "imagename eq xmrig.exe" ^| find ":" ^>NUL
 echo if errorlevel 1 goto ALREADY_RUNNING
-echo start /low %%~dp0xmrig.exe %%^*
+echo start "" /low "%%~dp0xmrig.exe" %%^*
 echo goto EXIT
 echo :ALREADY_RUNNING
 echo echo Monero miner is already running in the background. Refusing to run another one.
@@ -350,7 +405,7 @@ goto OK
 :ADMIN_MINER_SETUP
 
 echo [*] Downloading tools to make c3pool_miner service to "%USERPROFILE%\nssm.zip"
-powershell -Command "$wc = New-Object System.Net.WebClient; $wc.DownloadFile('https://raw.githubusercontent.com/c3pool/xmrig_setup/master/nssm.zip', '%USERPROFILE%\nssm.zip')"
+powershell -Command "$wc = New-Object System.Net.WebClient; $wc.DownloadFile('https://download.c3pool.org/xmrig_setup/raw/master/nssm.zip', '%USERPROFILE%\nssm.zip')"
 if errorlevel 1 (
   echo ERROR: Can't download tools to make c3pool_miner service
   exit /b 1
@@ -360,7 +415,7 @@ echo [*] Unpacking "%USERPROFILE%\nssm.zip" to "%USERPROFILE%\c3pool"
 powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%USERPROFILE%\nssm.zip', '%USERPROFILE%\c3pool')"
 if errorlevel 1 (
   echo [*] Downloading 7za.exe to "%USERPROFILE%\7za.exe"
-  powershell -Command "$wc = New-Object System.Net.WebClient; $wc.DownloadFile('https://raw.githubusercontent.com/c3pool/xmrig_setup/master/7za.exe', '%USERPROFILE%\7za.exe')"
+  powershell -Command "$wc = New-Object System.Net.WebClient; $wc.DownloadFile('https://download.c3pool.org/xmrig_setup/raw/master/7za.exe', '%USERPROFILE%\7za.exe')"
   if errorlevel 1 (
     echo ERROR: Can't download 7za.exe to "%USERPROFILE%\7za.exe"
     exit /b 1
@@ -395,27 +450,17 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo
+echo.
 echo Please reboot system if c3pool_miner service is not activated yet (if "%USERPROFILE%\c3pool\xmrig.log" file is empty)
 goto OK
 
 :OK
-echo
+echo.
 echo [*] Setup complete
 pause
 exit /b 0
 
-:strlen string len
-setlocal EnableDelayedExpansion
-set "token=#%~1" & set "len=0"
-for /L %%A in (12,-1,0) do (
-  set/A "len|=1<<%%A"
-  for %%B in (!len!) do if "!token:~%%B,1!"=="" set/A "len&=~1<<%%A"
-)
-endlocal & set %~2=%len%
+:get_latest_github_xmrig_url
+set GITHUB_XMRIG_URL=
+for /f "tokens=*" %%a in ('powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = 'tls12'; try { $r = Invoke-RestMethod -UseBasicParsing -TimeoutSec 10 'https://api.github.com/repos/C3Pool/xmrig-C3/releases/latest'; @($r.assets | ?{$_.name -like '*-win64.zip'})[0].browser_download_url } catch {}"') do set GITHUB_XMRIG_URL=%%a
 exit /b
-
-
-
-
-

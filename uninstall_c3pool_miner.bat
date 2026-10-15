@@ -1,6 +1,6 @@
 @echo off
 
-set VERSION=1.0
+set VERSION=1.1
 
 rem printing greetings
 
@@ -22,6 +22,7 @@ if not exist "%USERPROFILE%" (
 )
 
 echo [*] Removing c3pool miner
+set REMOVE_TRIES=0
 
 if %ADMIN% == 0 goto SKIP_ADMIN_PART
 
@@ -30,7 +31,8 @@ sc delete c3pool_miner
 
 :SKIP_ADMIN_PART
 
-taskkill /f /t /im xmrig.exe
+rem kill only the miner installed by this script, not other xmrig instances
+powershell -Command "Get-Process xmrig -ErrorAction SilentlyContinue | ?{$_.Path -and $_.Path.StartsWith($env:USERPROFILE + '\c3pool\', 'OrdinalIgnoreCase')} | Stop-Process -Force"
 
 if exist "%USERPROFILE%\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup" (
   set "STARTUP_DIR=%USERPROFILE%\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup"
@@ -51,9 +53,12 @@ del "%STARTUP_DIR%\c3pool_miner.bat"
 echo [*] Removing "%USERPROFILE%\c3pool" directory
 timeout 5
 rmdir /q /s "%USERPROFILE%\c3pool" >NUL 2>NUL
-IF EXIST "%USERPROFILE%\c3pool" GOTO REMOVE_DIR
+if not exist "%USERPROFILE%\c3pool" goto REMOVE_DIR_OK
+set /a "REMOVE_TRIES += 1"
+if %REMOVE_TRIES% lss 12 goto REMOVE_DIR
+echo WARNING: Can't remove "%USERPROFILE%\c3pool" directory ^(files still in use?^), please remove it manually after reboot
+:REMOVE_DIR_OK
 
 echo [*] Uninstall complete
 pause
 exit /b 0
-

@@ -173,12 +173,11 @@ pkill -9 -f "^$HOME/c3pool/xmrig( |$)" 2>/dev/null
 echo "[*] Removing $HOME/c3pool directory"
 rm -rf $HOME/c3pool
 
-# hosts outside Asia download the latest GitHub release first, others download.c3pool.org first
+# hosts outside China download the latest GitHub release first, China (or unknown country) download.c3pool.org first
 # (it always holds the latest build); the other source is used as fallback if the first one fails
 C3_XMRIG_URL="https://download.c3pool.org/xmrig_setup/raw/master/xmrig.tar.gz"
 # used only when the GitHub API can't be queried (e.g. rate limit)
 GITHUB_XMRIG_FALLBACK_URL="https://github.com/C3Pool/xmrig-C3/releases/download/v6.26.0-C7/xmrig-v6.26.0-C7-linux-Static.tar.gz"
-ASIA_COUNTRIES=" AE AF AM AZ BD BH BN BT CN CY GE HK ID IL IN IQ IR JO JP KG KH KP KR KW KZ LA LB LK MM MN MO MV MY NP OM PH PK PS QA SA SG SY TH TJ TL TM TR TW UZ VN YE "
 
 get_latest_github_xmrig_url() {
   curl -s --max-time 10 https://api.github.com/repos/C3Pool/xmrig-C3/releases/latest | grep -o '"browser_download_url": *"[^"]*linux-Static.tar.gz"' | head -n1 | cut -d '"' -f4
@@ -188,7 +187,7 @@ COUNTRY=`curl -s --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | grep '^
 echo "[*] Host country: ${COUNTRY:-unknown}"
 echo "[*] 主机所在国家/地区: ${COUNTRY:-未知}"
 GITHUB_XMRIG_URL=
-if [ -n "$COUNTRY" ] && [[ "$ASIA_COUNTRIES" != *" $COUNTRY "* ]]; then
+if [ -n "$COUNTRY" ] && [ "$COUNTRY" != "CN" ]; then
   GITHUB_XMRIG_URL=`get_latest_github_xmrig_url`
 fi
 if [ -n "$GITHUB_XMRIG_URL" ]; then

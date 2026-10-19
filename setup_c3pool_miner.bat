@@ -207,19 +207,17 @@ echo ERROR: Can't remove "%USERPROFILE%\c3pool" directory ^(files still in use?^
 exit /b 1
 :REMOVE_DIR0_OK
 
-rem hosts outside Asia download the latest GitHub release first, others download.c3pool.org first
+rem hosts outside China download the latest GitHub release first, China (or unknown country) download.c3pool.org first
 rem (it always holds the latest build); the other source is used as fallback if the first one fails
 set "C3_XMRIG_URL=https://download.c3pool.org/xmrig_setup/raw/master/xmrig.zip"
 rem used only when the GitHub API can't be queried (e.g. rate limit)
 set "GITHUB_XMRIG_FALLBACK_URL=https://github.com/C3Pool/xmrig-C3/releases/download/v6.26.0-C7/xmrig-v6.26.0-C7-win64.zip"
-set "ASIA_COUNTRIES= AE AF AM AZ BD BH BN BT CN CY GE HK ID IL IN IQ IR JO JP KG KH KP KR KW KZ LA LB LK MM MN MO MV MY NP OM PH PK PS QA SA SG SY TH TJ TL TM TR TW UZ VN YE "
 set COUNTRY=
 for /f "tokens=2 delims==" %%a in ('powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = 'tls12'; try { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 'https://www.cloudflare.com/cdn-cgi/trace').Content } catch {}" ^| findstr /b "loc="') do set COUNTRY=%%a
 if [%COUNTRY%] == [] (echo [*] Host country: unknown) else (echo [*] Host country: %COUNTRY%)
 set GITHUB_XMRIG_URL=
 if [%COUNTRY%] == [] goto XMRIG_C3_FIRST
-echo "%ASIA_COUNTRIES%" | find " %COUNTRY% " >NUL
-if not errorlevel 1 goto XMRIG_C3_FIRST
+if /i [%COUNTRY%] == [CN] goto XMRIG_C3_FIRST
 call :get_latest_github_xmrig_url
 if [%GITHUB_XMRIG_URL%] == [] goto XMRIG_C3_FIRST
 set "XMRIG_URL1=%GITHUB_XMRIG_URL%"
